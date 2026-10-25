@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Admin emails (same list as firebase-config.js).
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() in ['vzsonyi.zoltan@gmail.com', 'annaburka25@gmail.com'];
+    }
+    function signedIn() { return request.auth != null; }
+    function shortName(d) { return d.name is string && d.name.size() > 0 && d.name.size() <= 40; }
+
+    // Timetable, prices, live position and food pictures: everyone reads, only admins write.
+    match /party/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    // Seats: a guest can take a free seat and cancel their own. Admins can change anything.
+    match /seats/{seat} {
+      allow read: if true;
+      allow create: if signedIn() && shortName(request.resource.data)
+        && (request.resource.data.by == request.auth.uid || isAdmin());
+      allow delete: if isAdmin() || (signedIn() && resource.data.by == request.auth.uid);
+      allow update: if isAdmin();
+    }
+    // Food orders: guests create their own; admins mark them served or delete them.
+    match /orders/{id} {
+      allow read: if true;
+      allow create: if signedIn() && shortName(request.resource.data)
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.toasts is int && request.resource.data.toasts <= 100;
+      allow update, delete: if isAdmin();
+    }
+  }
+}

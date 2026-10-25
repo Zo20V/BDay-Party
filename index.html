@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#FFD200">
+<title>BirthdayJet Express</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: app shell like a train-ticket app. Yellow top bar, navy content cards, bottom tab bar. One column, phone first. */
+:root{
+  --yellow:#FFD200; --yellow-ink:#1B1600;
+  --navy:#0B2E63; --blue:#1460B8; --blue-soft:#E8F0FB;
+  --bg:#F3F6FB; --surface:#FFFFFF; --fg:#0D1B33; --muted:#5B6B85; --line:#D6DFEC;
+  --red:#D81E2C; --green:#13854A; --seat:#FFE48A; --seat-taken:#9FB3CF; --seat-mine:#1460B8;
+  --display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --map-land:#EEF2F7; --map-water:#9CC7EE; --map-green:#CFE8C9; --map-road:#FFFFFF; --map-ring:#F6D86B; --map-label:#5B6B85;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#071733; --surface:#0E2349; --fg:#EAF1FF; --muted:#9EB0CF; --line:#22406F; --blue:#5EA2F2; --blue-soft:#14305E;
+  --red:#FF5A63; --green:#3CCB7F; --seat:#C9A600; --seat-taken:#3C5A86; --seat-mine:#5EA2F2;
+  --map-land:#0F2650; --map-water:#1F5EA0; --map-green:#1C4A3A; --map-road:#28467A; --map-ring:#7A6820; --map-label:#9EB0CF; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#071733; --surface:#0E2349; --fg:#EAF1FF; --muted:#9EB0CF; --line:#22406F; --blue:#5EA2F2; --blue-soft:#14305E;
+  --red:#FF5A63; --green:#3CCB7F; --seat:#C9A600; --seat-taken:#3C5A86; --seat-mine:#5EA2F2;
+  --map-land:#0F2650; --map-water:#1F5EA0; --map-green:#1C4A3A; --map-road:#28467A; --map-ring:#7A6820; --map-label:#9EB0CF; color-scheme:dark}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.4;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--yellow)}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select{font:inherit;color:var(--fg);background:var(--surface);border:1.5px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;min-width:0}
+input:focus,select:focus,button:focus-visible{outline:3px solid var(--blue);outline-offset:1px}
+.gut{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--yellow);color:var(--yellow-ink)}
+.top-in{display:flex;align-items:center;gap:10px;padding-block:10px;max-width:640px;margin:0 auto}
+.logo{font-family:var(--display);font-weight:700;font-size:24px;letter-spacing:.5px;line-height:1;display:flex;align-items:center;gap:8px}
+.logo svg{flex:none}
+.logo small{display:block;font-family:var(--body);font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;opacity:.75}
+.top-actions{margin-left:auto;display:flex;gap:6px;align-items:center}
+.lang{appearance:none;border:0;background:rgba(0,0,0,.08);color:var(--yellow-ink);font-weight:700;padding:7px 10px;border-radius:999px;width:auto}
+.iconbtn{border:0;background:rgba(0,0,0,.08);color:var(--yellow-ink);width:36px;height:36px;border-radius:999px;display:grid;place-items:center}
+.trainbar{background:var(--navy);color:#fff}
+.trainbar .gut>div{max-width:640px;margin:0 auto;padding-block:12px;display:grid;gap:4px}
+.tb-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.tb-route{font-family:var(--display);font-size:22px;font-weight:600;line-height:1.1;text-wrap:balance}
+.tb-num{font-size:12px;background:var(--yellow);color:var(--yellow-ink);font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap}
+.tb-status{font-size:14px;color:#CFE0FF;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:3px 9px;border-radius:999px}
+.pill.ok{background:#E3F6EC;color:#0E6B3B}.pill.late{background:#FFE3E5;color:#B0121F}.pill.info{background:var(--yellow);color:var(--yellow-ink)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+.live .dot{animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.25}}
+@media (prefers-reduced-motion:reduce){.live .dot{animation:none}}
+main{max-width:640px;margin:0 auto;padding-block:16px 110px;display:grid;gap:14px}
+.card{background:var(--surface);border-radius:14px;border:1px solid var(--line)}
+.sec-h{font-family:var(--display);font-weight:700;font-size:20px;letter-spacing:.3px;text-transform:uppercase;color:var(--fg)}
+.muted{color:var(--muted)}
+.tt{padding:6px 0}
+.stop{display:grid;grid-template-columns:62px 26px 1fr;column-gap:8px;align-items:start;padding:10px 14px}
+.times{font-family:var(--display);font-variant-numeric:tabular-nums;text-align:right;line-height:1.15}
+.t{font-size:19px;font-weight:600}
+.t.old{font-size:14px;color:var(--muted);text-decoration:line-through}
+.t.new{color:var(--red);font-weight:700}
+.rail{position:relative;align-self:stretch;display:flex;justify-content:center}
+.rail::before{content:"";position:absolute;top:-10px;bottom:-10px;width:4px;background:var(--blue);border-radius:2px}
+.stop:first-child .rail::before{top:12px}.stop:last-child .rail::before{bottom:calc(100% - 12px)}
+.stop.passed .rail::before{background:var(--seat-taken)}
+.node{position:relative;margin-top:5px;width:16px;height:16px;border-radius:50%;background:var(--surface);border:4px solid var(--blue);z-index:1}
+.stop.end .node{width:20px;height:20px;margin-top:3px;background:var(--yellow);border-color:var(--navy)}
+.stop.passed .node{border-color:var(--seat-taken)}
+.stop.here .node{background:var(--yellow);border-color:var(--red);box-shadow:0 0 0 5px rgba(216,30,44,.18)}
+.sname{font-weight:700;font-size:16px}
+.saddr{font-size:13px;color:var(--muted)}
+.sline{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;font-size:12px}
+.sline a{color:var(--blue);font-weight:600;text-decoration:none}
+.delaytag{color:var(--red);font-weight:700}
+.trainmark{grid-column:2/4;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--red);padding:2px 0 2px 0}
+.mapwrap{position:relative;overflow:hidden;border-radius:14px}
+.mapwrap svg{display:block;width:100%;height:auto;touch-action:manipulation}
+.map-legend{display:flex;gap:12px;flex-wrap:wrap;padding:10px 14px;font-size:13px;align-items:center;border-top:1px solid var(--line)}
+.map-legend a{margin-left:auto;color:var(--blue);font-weight:700;text-decoration:none}
+.wagon-head{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--line);gap:8px;flex-wrap:wrap}
+.legend{display:flex;gap:10px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:4px}
+.wagon{padding:14px;display:grid;justify-content:center;gap:18px}
+.coach-wrap{display:grid;gap:6px}
+.coach-title{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--display);font-size:18px;text-transform:uppercase}
+.coach-title span{font-family:var(--body);font-size:12px;text-transform:none}
+.coach{border:3px solid var(--navy);border-radius:28px 28px 14px 14px;padding:16px 12px;display:grid;gap:8px;background:var(--blue-soft)}
+.row{display:grid;grid-template-columns:repeat(2,46px) 26px repeat(2,46px);gap:6px;align-items:center}
+.rown{font-size:11px;color:var(--muted);text-align:center;font-variant-numeric:tabular-nums}
+.seat{height:50px;border:0;border-radius:10px 10px 6px 6px;background:var(--seat);color:var(--yellow-ink);font-weight:700;font-size:13px;display:grid;place-items:center;line-height:1;position:relative;padding:0 2px;box-shadow:inset 0 -6px 0 rgba(0,0,0,.12)}
+.seat small{font-size:9px;font-weight:600;display:block;max-width:42px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seat.taken{background:var(--seat-taken);color:#fff}
+.seat.mine{background:var(--seat-mine);color:#fff}
+.table-sep{grid-column:1/-1;height:10px;border-radius:4px;background:var(--line);margin:2px 20px}
+.door{font-size:11px;text-align:center;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.list{display:grid}
+.li{display:flex;gap:10px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);font-size:14px}
+.li:first-child{border-top:0}
+.li .grow{flex:1;min-width:0}
+.badge{font-family:var(--display);font-weight:700;background:var(--yellow);color:var(--yellow-ink);border-radius:6px;padding:2px 7px;font-size:15px;font-variant-numeric:tabular-nums}
+.foods{display:grid;gap:12px}
+.food{display:grid;grid-template-columns:118px 1fr;overflow:hidden}
+.food .pic{background:var(--blue-soft);min-height:118px;height:100%;max-width:100%}
+.food .pic img,.food .pic svg{width:100%;height:100%;object-fit:cover;display:block}
+.food .bd{padding:10px 12px;display:grid;gap:6px;min-width:0}
+.food h3{margin:0;font-size:17px}
+.food p{margin:0;font-size:13px;color:var(--muted)}
+.price{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.toastp{font-weight:700;color:var(--blue);display:flex;gap:4px;align-items:center;font-size:14px}
+.step{display:flex;align-items:center;gap:6px}
+.step button{width:32px;height:32px;border-radius:50%;border:2px solid var(--blue);background:var(--surface);color:var(--blue);font-weight:700;font-size:18px;line-height:1}
+.step b{min-width:16px;text-align:center;font-variant-numeric:tabular-nums}
+.btn{border:0;border-radius:12px;padding:13px 16px;font-weight:700;background:var(--yellow);color:var(--yellow-ink);font-size:15px}
+.btn.blue{background:var(--blue);color:#fff}
+.btn.ghost{background:transparent;border:1.5px solid var(--line);color:var(--fg)}
+.btn.danger{background:transparent;border:1.5px solid var(--red);color:var(--red)}
+.btn.sm{padding:7px 10px;font-size:13px;border-radius:9px}
+.btn:disabled{opacity:.5}
+.cartbar{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom,0px));z-index:15}
+.cartbar>div{max-width:640px;margin:0 auto;padding-block:8px}
+.cartbar .btn{width:100%;display:flex;justify-content:space-between;box-shadow:0 6px 20px rgba(11,46,99,.25)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav.tabs>div{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+nav.tabs button{border:0;background:none;padding:8px 0 10px;display:grid;justify-items:center;gap:2px;font-size:12px;font-weight:600;color:var(--muted)}
+nav.tabs button[aria-current="page"]{color:var(--blue)}
+nav.tabs button[aria-current="page"] svg{background:var(--yellow);color:var(--yellow-ink)}
+nav.tabs svg{width:44px;height:28px;padding:3px 10px;border-radius:999px}
+.sheet-bg{position:fixed;inset:0;background:rgba(5,15,35,.5);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:640px;max-height:92%;overflow:auto;border-radius:20px 20px 0 0;padding-top:8px;padding-bottom:calc(20px + env(safe-area-inset-bottom,0px))}
+.sheet .grab{width:44px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 10px}
+.sheet h2{font-family:var(--display);font-size:24px;margin:0 0 4px;text-transform:uppercase}
+.form{display:grid;gap:12px}
+.form label{display:grid;gap:5px;font-size:13px;font-weight:600;color:var(--muted)}
+.ticket{border:2px dashed var(--blue);border-radius:14px;padding:12px 14px;display:grid;gap:4px;background:var(--blue-soft)}
+.ticket .big{font-family:var(--display);font-size:28px;font-weight:700;line-height:1}
+.note{font-size:13px;padding:10px 12px;border-radius:10px;background:var(--blue-soft)}
+.note.warn{background:#FFF4CC;color:#4A3B00}
+.copybox{font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px;user-select:all}
+.toastmsg{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom,0px));background:var(--navy);color:#fff;padding:10px 16px;border-radius:999px;z-index:60;font-weight:600;font-size:14px;max-width:90%;text-align:center}
+.adm-tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.adm-tabs button{border:1.5px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 12px;font-weight:700;font-size:13px;white-space:nowrap}
+.adm-tabs button[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+.adm-stop{border:1px solid var(--line);border-radius:12px;padding:12px;display:grid;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.delayctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.delayctl b{font-family:var(--display);font-size:20px;min-width:56px;text-align:center;color:var(--red)}
+.rowflex{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.empty{padding:16px 14px;color:var(--muted);font-size:14px}
+.lmap{height:300px;width:100%;border-radius:14px 14px 0 0;z-index:0}
+.lmap.big{height:min(62vh,520px)}
+.lmap.adm{height:320px;border-radius:12px;border:1px solid var(--line)}
+.mapslot{min-height:300px}
+.pin{width:28px;height:28px;border-radius:50%;background:#fff;border:4px solid #0B2E63;display:grid;place-items:center;font:700 12px var(--body);color:#0B2E63;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.pin.end{background:#FFD200}
+.pin.drag{width:36px;height:36px;font-size:14px;background:#FFD200;cursor:grab}
+.trainpin{filter:drop-shadow(0 2px 4px rgba(0,0,0,.4))}
+.trainpin.live{border-radius:50%;box-shadow:0 0 0 8px rgba(216,30,44,.25)}
+.leaflet-tooltip.stoplbl{font:700 13px var(--body);color:#0B2E63;border:0;box-shadow:0 1px 4px rgba(0,0,0,.25);padding:2px 7px}
+.leaflet-container{font:inherit;background:var(--map-land)}
+</style>
+</head>
+<body>
+
+<header class="top"><div class="gut"><div class="top-in">
+  <div class="logo">
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect width="34" height="34" rx="8" fill="#0B2E63"/><path d="M7 21c0-6 4-10 10-10h5c3 0 5 2 5 5v5H7z" fill="#FFD200"/><rect x="11" y="14" width="4" height="3" rx="1" fill="#0B2E63"/><rect x="17" y="14" width="4" height="3" rx="1" fill="#0B2E63"/><rect x="7" y="23" width="20" height="2" fill="#fff"/><circle cx="12" cy="27" r="2" fill="#fff"/><circle cx="22" cy="27" r="2" fill="#fff"/></svg>
+    <div>BirthdayJet<small id="sub">Anna &amp; Zoli Express</small></div>
+  </div>
+  <div class="top-actions">
+    <select class="lang" id="lang" aria-label="Language">
+      <option value="en">EN</option><option value="cs">CS</option><option value="sk">SK</option><option value="de">DE</option><option value="hu">HU</option>
+    </select>
+    <button class="iconbtn" id="adminBtn" aria-label="Admin"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></button>
+  </div>
+</div></div></header>
+
+<section class="trainbar"><div class="gut"><div>
+  <div class="tb-row"><div class="tb-route" id="tbRoute">Johny's → Mühlfeldgasse 1</div><span class="tb-num" id="tbNum">BJ 2026</span></div>
+  <div class="tb-status" id="tbStatus"></div>
+</div></div></section>
+
+<main class="gut" id="main"></main>
+<div class="cartbar gut" id="cartbar" hidden><div><button class="btn blue" id="cartBtn"></button></div></div>
+
+<nav class="tabs"><div>
+  <button data-tab="route"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="6" cy="5" r="2"/><circle cx="18" cy="19" r="2"/><path d="M6 7v4a3 3 0 0 0 3 3h6a3 3 0 0 1 3 3"/></svg><span data-t="route">Route</span></button>
+  <button data-tab="map"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg><span data-t="map">Map</span></button>
+  <button data-tab="seats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 4h7a2 2 0 0 1 2 2v7H7z"/><path d="M5 13h13l1 4H5zM7 17v3M17 17v3"/></svg><span data-t="seats">Seats</span></button>
+  <button data-tab="food"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 11h16a8 8 0 0 1-16 0zM12 3v4M8 5v2M16 5v2"/></svg><span data-t="food">Food</span></button>
+</div></nav>
+
+<div id="sheetRoot"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+(() => {
+"use strict";
+/* ---------- defaults (Anna & Zoli's route) ---------- */
+const DEFAULT_CFG = {
+  title: "Anna & Zoli Express",
+  trainNo: "BJ 2026",
+  date: "",
+  stops: [
+    { id:"johnys",  name:"Johny's",        address:"Schleifmühlgasse 11, 1040 Wien",               lat:48.1978, lng:16.3655, arr:"",      dep:"18:00", delay:0 },
+    { id:"fania",   name:"Fanialive",      address:"U-Bahn-Bogen 22–23, Lerchenfelder Gürtel, 1080 Wien", lat:48.2090, lng:16.3393, arr:"19:15", dep:"20:30", delay:0 },
+    { id:"luxor",   name:"Luxor",          address:"Wien",                                          lat:48.2045, lng:16.3500, arr:"20:45", dep:"21:45", delay:0 },
+    { id:"crimson", name:"Crimson Café",   address:"Wien",                                          lat:48.2110, lng:16.3640, arr:"22:00", dep:"23:00", delay:0 },
+    { id:"home",    name:"Mühlfeldgasse 1",address:"Mühlfeldgasse 1, 1020 Wien",                    lat:48.2215, lng:16.3815, arr:"23:30", dep:"",      delay:0 }
+  ],
+  prices: { poppy:1, sushi:2, apple:1, croissant:2, goulash:3 },
+  live: null
+};
+const ADMIN_EMAILS = (window.ADMIN_EMAILS||[]).map(e=>String(e).toLowerCase());
+const denied = e => !!e && (e.code==="permission-denied"||denied(e));
+const ROWS = 10, WAGONS = [7,8], PER = ROWS*4, TOTAL = PER*WAGONS.length;
+const wagonOf = n => WAGONS[Math.min(WAGONS.length-1,Math.floor((n-1)/PER))];
+
+/* ---------- translations ---------- */
+const UI = {
+  en:{route:"Route",map:"Map",seats:"Seats",food:"Food",timetable:"Timetable",onTime:"On time",late:"min late",boarding:"Boarding at",departsIn:"departs in",nextStop:"Next stop",at:"Now at",arrived:"Arrived at the final station",arrivesIn:"arrives in",min:"min",h:"h",live:"Live position",updated:"updated",ago:"ago",directions:"Directions",openRoute:"Open route in Google Maps",wagon:"Party wagon",free:"Free",taken:"Taken",yours:"Your seat",tapSeat:"Tap a free seat to reserve your ticket.",reserve:"Reserve seat",yourName:"Your name",joinAt:"Where do you join?",seat:"Seat",cancel:"Cancel reservation",close:"Close",booked:"Seat reserved",passengers:"Passengers",nobody:"No passengers yet. Be the first to pick a seat!",menu:"On-board menu",menuNote:"Pay in toasts: each toast is a short speech for Anna & Zoli.",toast:"toast",toasts:"toasts",checkout:"Order",yourOrder:"Your order",total:"Total",placeOrder:"Place order",ordered:"Order placed. Prepare your toasts!",toPay:"You owe",cantWrite:"This link is read-only, so we could not save it here. Copy the text below and send it to Anna or Zoli:",copy:"Copy",copied:"Copied",sendWA:"Send on WhatsApp",taken2:"Someone just took this seat. Pick another one.",needName:"Please enter your name.",seatOf:"Seat",departure:"Departure",arrival:"Arrival",scheduled:"Scheduled",expected:"Expected",partyOn:"Party day",stopsLbl:"stops"},
+  cs:{route:"Trasa",map:"Mapa",seats:"Místa",food:"Jídlo",timetable:"Jízdní řád",onTime:"Včas",late:"min zpoždění",boarding:"Nástup v",departsIn:"odjezd za",nextStop:"Příští zastávka",at:"Nyní v",arrived:"Přijeli jsme do cílové stanice",arrivesIn:"příjezd za",min:"min",h:"h",live:"Aktuální poloha",updated:"aktualizováno před",ago:"",directions:"Navigace",openRoute:"Otevřít trasu v Google Maps",wagon:"Párty vůz",free:"Volné",taken:"Obsazené",yours:"Vaše místo",tapSeat:"Klepněte na volné místo a rezervujte si jízdenku.",reserve:"Rezervovat místo",yourName:"Vaše jméno",joinAt:"Kde nastoupíte?",seat:"Místo",cancel:"Zrušit rezervaci",close:"Zavřít",booked:"Místo rezervováno",passengers:"Cestující",nobody:"Zatím žádní cestující. Buďte první!",menu:"Palubní menu",menuNote:"Platí se přípitky: každý přípitek je krátký proslov pro Annu a Zoliho.",toast:"přípitek",toasts:"přípitky",checkout:"Objednat",yourOrder:"Vaše objednávka",total:"Celkem",placeOrder:"Odeslat objednávku",ordered:"Objednáno. Připravte si přípitky!",toPay:"Dlužíte",cantWrite:"Tento odkaz je jen pro čtení, uložit to tu nejde. Zkopírujte text a pošlete ho Anně nebo Zolimu:",copy:"Kopírovat",copied:"Zkopírováno",sendWA:"Poslat přes WhatsApp",taken2:"Toto místo právě někdo obsadil. Vyberte jiné.",needName:"Zadejte své jméno.",seatOf:"Místo",departure:"Odjezd",arrival:"Příjezd",scheduled:"Plán",expected:"Očekáváno",partyOn:"Den oslavy",stopsLbl:"zastávek"},
+  sk:{route:"Trasa",map:"Mapa",seats:"Miesta",food:"Jedlo",timetable:"Cestovný poriadok",onTime:"Načas",late:"min meškanie",boarding:"Nástup v",departsIn:"odchod o",nextStop:"Nasledujúca zastávka",at:"Teraz v",arrived:"Prišli sme do cieľovej stanice",arrivesIn:"príchod o",min:"min",h:"h",live:"Aktuálna poloha",updated:"aktualizované pred",ago:"",directions:"Navigácia",openRoute:"Otvoriť trasu v Google Maps",wagon:"Párty vozeň",free:"Voľné",taken:"Obsadené",yours:"Vaše miesto",tapSeat:"Ťuknite na voľné miesto a rezervujte si lístok.",reserve:"Rezervovať miesto",yourName:"Vaše meno",joinAt:"Kde nastúpite?",seat:"Miesto",cancel:"Zrušiť rezerváciu",close:"Zavrieť",booked:"Miesto rezervované",passengers:"Cestujúci",nobody:"Zatiaľ žiadni cestujúci. Buďte prvý!",menu:"Palubné menu",menuNote:"Platí sa prípitkami: každý prípitok je krátky príhovor pre Annu a Zoliho.",toast:"prípitok",toasts:"prípitky",checkout:"Objednať",yourOrder:"Vaša objednávka",total:"Spolu",placeOrder:"Odoslať objednávku",ordered:"Objednané. Pripravte si prípitky!",toPay:"Dlhujete",cantWrite:"Tento odkaz je len na čítanie, uložiť to tu nejde. Skopírujte text a pošlite ho Anne alebo Zolimu:",copy:"Kopírovať",copied:"Skopírované",sendWA:"Poslať cez WhatsApp",taken2:"Toto miesto práve niekto obsadil. Vyberte iné.",needName:"Zadajte svoje meno.",seatOf:"Miesto",departure:"Odchod",arrival:"Príchod",scheduled:"Plán",expected:"Očakávané",partyOn:"Deň oslavy",stopsLbl:"zastávok"},
+  de:{route:"Strecke",map:"Karte",seats:"Plätze",food:"Essen",timetable:"Fahrplan",onTime:"Pünktlich",late:"Min. Verspätung",boarding:"Einstieg bei",departsIn:"Abfahrt in",nextStop:"Nächster Halt",at:"Jetzt bei",arrived:"Endstation erreicht",arrivesIn:"Ankunft in",min:"Min.",h:"Std.",live:"Live-Position",updated:"aktualisiert vor",ago:"",directions:"Route",openRoute:"Route in Google Maps öffnen",wagon:"Partywagen",free:"Frei",taken:"Besetzt",yours:"Dein Platz",tapSeat:"Tippe auf einen freien Platz, um dein Ticket zu reservieren.",reserve:"Platz reservieren",yourName:"Dein Name",joinAt:"Wo steigst du zu?",seat:"Platz",cancel:"Reservierung stornieren",close:"Schließen",booked:"Platz reserviert",passengers:"Fahrgäste",nobody:"Noch keine Fahrgäste. Sei die erste Person!",menu:"Bordmenü",menuNote:"Bezahlt wird mit Toasts: jeder Toast ist eine kurze Rede für Anna & Zoli.",toast:"Toast",toasts:"Toasts",checkout:"Bestellen",yourOrder:"Deine Bestellung",total:"Gesamt",placeOrder:"Bestellung absenden",ordered:"Bestellt. Bereite deine Toasts vor!",toPay:"Du schuldest",cantWrite:"Dieser Link ist nur lesbar, daher konnten wir nichts speichern. Kopiere den Text und schick ihn an Anna oder Zoli:",copy:"Kopieren",copied:"Kopiert",sendWA:"Per WhatsApp senden",taken2:"Dieser Platz wurde gerade vergeben. Wähle einen anderen.",needName:"Bitte gib deinen Namen ein.",seatOf:"Platz",departure:"Abfahrt",arrival:"Ankunft",scheduled:"Plan",expected:"Erwartet",partyOn:"Partytag",stopsLbl:"Halte"},
+  hu:{route:"Útvonal",map:"Térkép",seats:"Helyek",food:"Étel",timetable:"Menetrend",onTime:"Pontos",late:"perc késés",boarding:"Beszállás:",departsIn:"indulás",nextStop:"Következő megálló",at:"Most itt:",arrived:"Megérkeztünk a végállomásra",arrivesIn:"érkezés",min:"perc",h:"óra",live:"Élő pozíció",updated:"frissítve",ago:"ezelőtt",directions:"Útvonal",openRoute:"Útvonal megnyitása a Google Térképen",wagon:"Buli kocsi",free:"Szabad",taken:"Foglalt",yours:"A helyed",tapSeat:"Koppints egy szabad helyre a jegyfoglaláshoz.",reserve:"Hely foglalása",yourName:"Neved",joinAt:"Hol szállsz fel?",seat:"Hely",cancel:"Foglalás törlése",close:"Bezárás",booked:"Hely lefoglalva",passengers:"Utasok",nobody:"Még nincsenek utasok. Légy te az első!",menu:"Fedélzeti menü",menuNote:"Tószttal fizetsz: minden tószt egy rövid beszéd Annának és Zolinak.",toast:"tószt",toasts:"tószt",checkout:"Rendelés",yourOrder:"Rendelésed",total:"Összesen",placeOrder:"Rendelés leadása",ordered:"Rendelés leadva. Készítsd a tósztokat!",toPay:"Tartozásod",cantWrite:"Ez a link csak olvasható, ezért itt nem tudtuk menteni. Másold ki a szöveget és küldd el Annának vagy Zolinak:",copy:"Másolás",copied:"Másolva",sendWA:"Küldés WhatsAppon",taken2:"Ezt a helyet épp lefoglalták. Válassz másikat.",needName:"Add meg a neved.",seatOf:"Hely",departure:"Indulás",arrival:"Érkezés",scheduled:"Tervezett",expected:"Várható",partyOn:"A buli napja",stopsLbl:"megálló"}
+};
+const FOODS = [
+  { id:"poppy", n:{en:"Poppy seed cake",cs:"Makový koláč",sk:"Makový koláč",de:"Mohnkuchen",hu:"Mákos sütemény"},
+    d:{en:"Moist sponge layered with sweet ground poppy seeds and a hint of lemon zest, the way Central European grandmothers bake it.",
+       cs:"Vláčné těsto s vrstvou sladkého mletého máku a špetkou citronové kůry, přesně jako od babičky.",
+       sk:"Vláčne cesto s vrstvou sladkého mletého maku a štipkou citrónovej kôry, presne ako od babky.",
+       de:"Saftiger Teig mit süßer gemahlener Mohnfülle und einem Hauch Zitronenschale, genau wie bei Oma.",
+       hu:"Puha tészta édes darált mákos réteggel és egy csipet citromhéjjal, pont ahogy a nagymama sütötte."} },
+  { id:"sushi", n:{en:"Sushi",cs:"Sushi",sk:"Sushi",de:"Sushi",hu:"Szusi"},
+    d:{en:"Hand-rolled maki and nigiri with salmon, tuna and cucumber, served with soy sauce, wasabi and pickled ginger.",
+       cs:"Ručně balené maki a nigiri s lososem, tuňákem a okurkou, se sójovou omáčkou, wasabi a nakládaným zázvorem.",
+       sk:"Ručne balené maki a nigiri s lososom, tuniakom a uhorkou, so sójovou omáčkou, wasabi a nakladaným zázvorom.",
+       de:"Handgerollte Maki und Nigiri mit Lachs, Thunfisch und Gurke, dazu Sojasauce, Wasabi und eingelegter Ingwer.",
+       hu:"Kézzel tekert maki és nigiri lazaccal, tonhallal és uborkával, szójaszósszal, wasabival és savanyított gyömbérrel."} },
+  { id:"apple", n:{en:"Apple pie",cs:"Jablečný koláč",sk:"Jablkový koláč",de:"Apfelkuchen",hu:"Almás pite"},
+    d:{en:"Buttery shortcrust filled with cinnamon apples, baked golden. Best eaten still warm.",
+       cs:"Máslové křehké těsto plné jablek se skořicí, upečené dozlatova. Nejlepší ještě teplý.",
+       sk:"Maslové krehké cesto plné jabĺk so škoricou, upečené dozlatista. Najlepší ešte teplý.",
+       de:"Butteriger Mürbteig mit Zimtäpfeln, goldbraun gebacken. Am besten noch warm.",
+       hu:"Vajas omlós tészta fahéjas almatöltelékkel, aranybarnára sütve. Melegen a legjobb."} },
+  { id:"croissant", n:{en:"Croissant sandwich",cs:"Croissant sendvič",sk:"Croissant sendvič",de:"Croissant-Sandwich",hu:"Croissant szendvics"},
+    d:{en:"Flaky butter croissant filled with ham, cheese, fresh tomato and crisp lettuce.",
+       cs:"Křupavý máslový croissant plněný šunkou, sýrem, čerstvým rajčetem a salátem.",
+       sk:"Chrumkavý maslový croissant plnený šunkou, syrom, čerstvou paradajkou a šalátom.",
+       de:"Blättriges Buttercroissant mit Schinken, Käse, frischer Tomate und knackigem Salat.",
+       hu:"Leveles vajas croissant sonkával, sajttal, friss paradicsommal és ropogós salátával."} },
+  { id:"goulash", n:{en:"Goulash soup",cs:"Gulášová polévka",sk:"Gulášová polievka",de:"Gulaschsuppe",hu:"Gulyásleves"},
+    d:{en:"Hearty beef soup slow-cooked with paprika, onion, potatoes and caraway. Warms you up for the next stop.",
+       cs:"Sytá hovězí polévka pomalu vařená s paprikou, cibulí, bramborami a kmínem. Zahřeje před další zastávkou.",
+       sk:"Sýta hovädzia polievka pomaly varená s paprikou, cibuľou, zemiakmi a rascou. Zahreje pred ďalšou zastávkou.",
+       de:"Kräftige Rindssuppe, langsam gekocht mit Paprika, Zwiebeln, Erdäpfeln und Kümmel. Wärmt für die nächste Station.",
+       hu:"Laktató marhahúsleves lassan főzve pirospaprikával, hagymával, burgonyával és köménnyel. Átmelegít a következő megállóig."} }
+];
+const FOOD_SVG = {
+  poppy:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#FFE9A8"/><circle cx="100" cy="112" r="70" fill="#F3D9A4"/><path d="M40 120 L150 70 L165 130 L55 160Z" fill="#E9B868"/><path d="M48 128 L152 82 L156 98 L52 144Z" fill="#2B2B3A"/><path d="M52 144 L156 98 L160 114 L55 152Z" fill="#E9B868"/><path d="M55 152 L160 114 L163 124 L56 160Z" fill="#2B2B3A"/><path d="M40 120 L150 70 L152 82 L44 128Z" fill="#FFF6E0"/><g fill="#2B2B3A"><circle cx="80" cy="104" r="2"/><circle cx="100" cy="96" r="2"/><circle cx="120" cy="88" r="2"/><circle cx="92" cy="104" r="1.5"/></g></svg>`,
+  sushi:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#CDE3F7"/><rect x="20" y="120" width="160" height="40" rx="8" fill="#0B2E63"/><g transform="translate(62 100)"><circle r="30" fill="#1B2A24"/><circle r="24" fill="#fff"/><circle r="11" fill="#F27A54"/><circle cx="4" cy="-3" r="4" fill="#7BC67E"/></g><g transform="translate(130 100)"><circle r="30" fill="#1B2A24"/><circle r="24" fill="#fff"/><circle r="11" fill="#D8344B"/></g><ellipse cx="100" cy="62" rx="44" ry="16" fill="#fff"/><path d="M58 58 Q100 30 142 58 Q100 50 58 58Z" fill="#F27A54"/><path d="M70 52 L80 46 M92 46 L102 42 M114 44 L124 46" stroke="#FFC2A8" stroke-width="3"/><circle cx="165" cy="45" r="10" fill="#9BC53D"/></svg>`,
+  apple:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#FFE3C7"/><ellipse cx="100" cy="112" rx="78" ry="60" fill="#fff"/><ellipse cx="100" cy="106" rx="66" ry="48" fill="#D9933F"/><ellipse cx="100" cy="104" rx="58" ry="40" fill="#F0B562"/><g stroke="#C77E2E" stroke-width="8" stroke-linecap="round"><path d="M62 82 L138 126"/><path d="M48 104 L118 144"/><path d="M84 68 L152 108"/><path d="M138 82 L62 126"/><path d="M152 104 L84 144"/><path d="M116 68 L48 108"/></g><circle cx="160" cy="50" r="16" fill="#D8344B"/><path d="M160 34 q4 -10 12 -10" stroke="#5A3B1C" stroke-width="3" fill="none"/></svg>`,
+  croissant:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#FFF0B8"/><path d="M28 120 Q100 30 172 120 Q140 104 100 108 Q60 104 28 120Z" fill="#D08A35"/><path d="M40 118 Q100 128 160 118 L156 126 Q100 140 44 126Z" fill="#7BC67E"/><path d="M44 126 Q100 138 156 126 L150 134 Q100 146 50 134Z" fill="#E8546A"/><path d="M50 134 Q100 146 150 134 Q140 158 100 160 Q60 158 50 134Z" fill="#E0A04C"/><g stroke="#B36D22" stroke-width="5" fill="none" stroke-linecap="round"><path d="M70 74 Q78 92 72 108"/><path d="M100 62 Q106 84 100 106"/><path d="M130 74 Q122 92 128 108"/></g><rect x="60" y="112" width="80" height="6" fill="#FFD84D"/></svg>`,
+  goulash:`<svg viewBox="0 0 200 200"><rect width="200" height="200" fill="#F9D6CF"/><ellipse cx="100" cy="96" rx="80" ry="26" fill="#fff"/><path d="M20 96 Q24 170 100 170 Q176 170 180 96Z" fill="#fff"/><path d="M28 100 Q32 160 100 160 Q168 160 172 100" fill="none" stroke="#0B2E63" stroke-width="4"/><ellipse cx="100" cy="96" rx="68" ry="18" fill="#B8321E"/><g fill="#F2A541"><rect x="66" y="88" width="12" height="10" rx="3"/><rect x="110" y="92" width="12" height="10" rx="3"/></g><g fill="#6B2A16"><rect x="88" y="84" width="14" height="10" rx="3"/><rect x="128" y="86" width="12" height="9" rx="3"/></g><circle cx="80" cy="102" r="3" fill="#7BC67E"/><path d="M80 60 q8 -12 0 -24 M100 56 q8 -12 0 -24 M120 60 q8 -12 0 -24" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" opacity=".8"/></svg>`
+};
+const TOAST_ICON = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 3h5l-1 7a2.5 2.5 0 0 1-3 0zM14 3h5l-1 7a2.5 2.5 0 0 1-3 0zM7.5 12v8M16.5 12v8M5 20h5M14 20h5"/></svg>`;
+
+/* ---------- state ---------- */
+const S = {
+  cfg: structuredClone(DEFAULT_CFG), imgs:{}, seats:{}, orders:[],
+  lang: ls("bj.lang") || guessLang(), tab: ls("bj.tab") || "route",
+  cart:{}, db:null, user:null, uid:null, canWrite:null, canAdmin:false, admin:false, admTab:"times",
+  my: JSON.parse(ls("bj.my") || "{}")
+};
+function ls(k,v){try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v);}catch(e){} return null}
+function guessLang(){const l=(navigator.language||"en").slice(0,2);return UI[l]?l:"en"}
+const t = k => (UI[S.lang]||UI.en)[k] ?? UI.en[k] ?? k;
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $ = s => document.querySelector(s);
+function saveMy(){ls("bj.my",JSON.stringify(S.my))}
+
+/* ---------- time logic ---------- */
+const toMin = s => { if(!s) return null; const m=/^(\d{1,2}):(\d{2})$/.exec(s); return m? (+m[1])*60+(+m[2]) : null; };
+const fmt = m => { if(m==null) return ""; m=((Math.round(m)%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); };
+function timeline(){
+  // returns per-stop {arr, dep, arrE, depE} in absolute minutes from party-day midnight, handling midnight rollover
+  let last=-1, add=0;
+  return S.cfg.stops.map(s=>{
+    const o={};
+    for(const k of ["arr","dep"]){
+      let m=toMin(s[k]); if(m==null){o[k]=null;continue}
+      m+=add; if(m<last){add+=1440;m+=1440} last=m; o[k]=m;
+    }
+    const d=+s.delay||0; o.arrE=o.arr==null?null:o.arr+d; o.depE=o.dep==null?null:o.dep+d; o.delay=d;
+    return o;
+  });
+}
+function partyBase(){
+  const d=S.cfg.date; let base;
+  if(d && /^\d{4}-\d{2}-\d{2}$/.test(d)){const [y,mo,da]=d.split("-").map(Number); base=new Date(y,mo-1,da);}
+  else { base=new Date(); base.setHours(0,0,0,0); const n=new Date(); if(n.getHours()<6){base.setDate(base.getDate()-1)} }
+  return base;
+}
+function nowMin(){ return (Date.now()-partyBase().getTime())/60000; }
+function status(){
+  const tl=timeline(), n=nowMin(), st=S.cfg.stops, L=st.length-1;
+  const firstDep=tl[0].depE;
+  if(firstDep==null) return {phase:"pre",i:0,mins:null,tl};
+  if(n<firstDep) return {phase:"pre",i:0,mins:firstDep-n,tl};
+  for(let i=0;i<L;i++){
+    const dep=tl[i].depE ?? tl[i].arrE, arr=tl[i+1].arrE ?? tl[i+1].depE;
+    if(dep==null||arr==null) continue;
+    if(n>=dep && n<arr) return {phase:"move",i,frac:(n-dep)/Math.max(1,arr-dep),mins:arr-n,tl};
+    const nd=tl[i+1].depE;
+    if(i+1<L && n>=arr && nd!=null && n<nd) return {phase:"at",i:i+1,mins:nd-n,tl};
+  }
+  return {phase:"done",i:L,tl};
+}
+const dur = m => { m=Math.max(0,Math.round(m)); return m>=60? `${Math.floor(m/60)} ${t("h")} ${m%60} ${t("min")}` : `${m} ${t("min")}`; };
+
+/* ---------- top bar ---------- */
+function renderBar(){
+  const st=S.cfg.stops, s=status(), delayNow = st[Math.min(s.i+(s.phase==="move"?1:0),st.length-1)].delay||0;
+  $("#tbRoute").textContent = `${st[0].name} → ${st[st.length-1].name}`;
+  $("#tbNum").textContent = S.cfg.trainNo||"BJ";
+  $("#sub").textContent = S.cfg.title||"";
+  let msg="";
+  if(s.phase==="pre") msg = s.mins==null? `${t("boarding")} ${esc(st[0].name)}` : `${t("boarding")} ${esc(st[0].name)} · ${t("departsIn")} ${dur(s.mins)}`;
+  else if(s.phase==="move") msg = `${t("nextStop")}: <b>${esc(st[s.i+1].name)}</b> · ${t("arrivesIn")} ${dur(s.mins)}`;
+  else if(s.phase==="at") msg = `${t("at")} <b>${esc(st[s.i].name)}</b> · ${t("departsIn")} ${dur(s.mins)}`;
+  else msg = t("arrived");
+  const pill = delayNow>0 ? `<span class="pill late">+${delayNow} ${t("late")}</span>` : `<span class="pill ok">${t("onTime")}</span>`;
+  const live = liveFresh()? `<span class="pill info live"><span class="dot"></span>${t("live")}</span>`:"";
+  let dateTxt="";
+  if(S.cfg.date){ try{dateTxt=` · ${partyBase().toLocaleDateString(S.lang,{weekday:"short",day:"numeric",month:"short"})}`}catch(e){} }
+  $("#tbStatus").innerHTML = `${pill}${live}<span>${msg}${esc(dateTxt)}</span>`;
+}
+function liveFresh(){ const l=S.cfg.live; return l && l.ts && (Date.now()-l.ts) < 45*60000 && isFinite(l.lat) && isFinite(l.lng); }
+
+/* ---------- views ---------- */
+function gmaps(q){ return "https://www.google.com/maps/search/?api=1&query="+encodeURIComponent(q); }
+function gmapsRoute(){ return "https://www.google.com/maps/dir/"+S.cfg.stops.map(s=>encodeURIComponent(s.address && s.address!=="Wien" ? s.address : `${s.lat},${s.lng}`)).join("/"); }
+function stopQuery(s){ return s.address && s.address!=="Wien" ? `${s.name}, ${s.address}` : `${s.lat},${s.lng}`; }
+
+function timeCell(planned, eff, delay){
+  if(planned==null) return "";
+  if(delay>0) return `<div class="t old">${fmt(planned)}</div><div class="t new">${fmt(eff)}</div>`;
+  return `<div class="t">${fmt(planned)}</div>`;
+}
+function viewRoute(){
+  const s=status(), st=S.cfg.stops, tl=s.tl;
+  const rows = st.map((x,i)=>{
+    const o=tl[i]; const cls=["stop"];
+    if(i===0||i===st.length-1) cls.push("end");
+    const passed = (s.phase==="move" && i<=s.i) || (s.phase==="at" && i<s.i) || s.phase==="done";
+    if(passed && !(s.phase==="done" && i===st.length-1)) cls.push("passed");
+    if((s.phase==="at"&&i===s.i)||(s.phase==="pre"&&i===0)||(s.phase==="done"&&i===st.length-1)) cls.push("here");
+    const arrHtml = o.arr!=null ? timeCell(o.arr,o.arrE,o.delay) : "";
+    const depHtml = o.dep!=null ? timeCell(o.dep,o.depE,o.delay) : "";
+    const both = o.arr!=null && o.dep!=null;
+    let times = both ? `${arrHtml}<div style="height:4px"></div>${depHtml}` : (arrHtml||depHtml);
+    const sub = both ? `${t("arrival")} / ${t("departure")}` : (o.dep!=null? t("departure") : t("arrival"));
+    let row = `<div class="${cls.join(" ")}"><div class="times">${times}</div><div class="rail"><div class="node"></div></div>
+      <div><div class="sname">${esc(x.name)}</div><div class="saddr">${esc(x.address||"")}</div>
+      <div class="sline"><span class="muted">${sub}</span>${o.delay>0?`<span class="delaytag">+${o.delay} ${t("late")}</span>`:""}<a href="${gmaps(stopQuery(x))}" target="_blank" rel="noopener">${t("directions")} ↗</a></div></div></div>`;
+    if(s.phase==="move" && i===s.i){
+      row += `<div class="stop"><div></div><div class="rail"></div><div class="trainmark">${trainSvg(18)} ${t("nextStop")}: ${esc(st[i+1].name)} · ${dur(s.mins)}</div></div>`;
+    }
+    return row;
+  }).join("");
+  const mine = S.my.seat && S.seats[S.my.seat] ? ticketHtml(S.my.seat) : "";
+  return `${mine}<section class="card"><div class="wagon-head"><div class="sec-h">${t("timetable")}</div><span class="muted" style="font-size:13px">${st.length} ${t("stopsLbl")}</span></div><div class="tt">${rows}</div></section>
+  <section class="card">${mapHtml(false)}<div class="map-legend"><span>${t("live")}: ${liveFresh()? t("updated")+" "+ago(S.cfg.live.ts):"—"}</span><a href="${gmapsRoute()}" target="_blank" rel="noopener">${t("openRoute")} ↗</a></div></section>`;
+}
+function ago(ts){ const m=Math.max(0,Math.round((Date.now()-ts)/60000)); return `${m} ${t("min")} ${t("ago")}`.trim(); }
+function trainSvg(sz){ return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="15" rx="5" fill="#FFD200" stroke="#0B2E63" stroke-width="2"/><rect x="6" y="6" width="12" height="5" rx="1.5" fill="#0B2E63"/><circle cx="8" cy="14.5" r="1.4" fill="#0B2E63"/><circle cx="16" cy="14.5" r="1.4" fill="#0B2E63"/><path d="M7 21l2-3M17 21l-2-3" stroke="#0B2E63" stroke-width="2"/></svg>`; }
+
+/* ---------- map (Leaflet + OpenStreetMap / CARTO tiles) ---------- */
+const TILE_URL="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
+const TILE_ATTR='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const HAS_L = () => typeof L!=="undefined";
+const M={el:null,map:null,layer:null,fitKey:""};
+function trainLatLng(stops){
+  const s=status();
+  if(liveFresh()) return [S.cfg.live.lat,S.cfg.live.lng];
+  if(s.phase==="move"){ const a=stops[s.i], b=stops[s.i+1], f=Math.min(1,Math.max(0,s.frac)); return [a.lat+(b.lat-a.lat)*f, a.lng+(b.lng-a.lng)*f]; }
+  const k=stops[Math.min(s.i,stops.length-1)]; return [k.lat,k.lng];
+}
+function newMap(el){
+  const map=L.map(el,{zoomControl:true,scrollWheelZoom:false,tap:true});
+  L.tileLayer(TILE_URL,{attribution:TILE_ATTR,subdomains:"abcd",maxZoom:19}).addTo(map);
+  return map;
+}
+function drawRoute(layer, stops, opt={}){
+  layer.clearLayers();
+  const ll=stops.map(x=>[x.lat,x.lng]);
+  L.polyline(ll,{color:"#0B2E63",weight:9,opacity:.85,lineJoin:"round"}).addTo(layer);
+  L.polyline(ll,{color:"#FFD200",weight:3,dashArray:"10 8"}).addTo(layer);
+  if(!opt.drag){
+    const s=status();
+    const passedIdx = s.phase==="move"? s.i : (s.phase==="done"? stops.length-1 : s.i);
+    const done = stops.slice(0,passedIdx+1).map(x=>[x.lat,x.lng]);
+    if(s.phase==="move") done.push(trainLatLng(stops));
+    if(done.length>1) L.polyline(done,{color:"#1460B8",weight:9,lineJoin:"round"}).addTo(layer);
+  }
+  stops.forEach((x,i)=>{
+    const end=i===0||i===stops.length-1;
+    const sz=opt.drag?36:28;
+    const m=L.marker([x.lat,x.lng],{draggable:!!opt.drag,autoPan:true,icon:L.divIcon({className:"",html:`<div class="pin ${end?"end":""} ${opt.drag?"drag":""}">${i+1}</div>`,iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]})}).addTo(layer);
+    m.bindTooltip(esc(x.name),{permanent:true,direction:"right",offset:[sz/2,0],className:"stoplbl"});
+    if(opt.drag) m.on("dragend",()=>{ const p=m.getLatLng(); opt.onDrag(i,p.lat,p.lng); });
+  });
+  if(!opt.drag){
+    const live=liveFresh();
+    L.marker(trainLatLng(stops),{zIndexOffset:1000,interactive:false,icon:L.divIcon({className:"",html:`<div class="trainpin ${live?"live":""}">${trainSvg(40)}</div>`,iconSize:[40,40],iconAnchor:[20,20]})}).addTo(layer);
+  }
+}
+function mapHtml(big){ return `<div class="mapslot" data-mapslot="${big?1:0}"></div>`; }
+function mountMap(){
+  const slot=document.querySelector("[data-mapslot]"); if(!slot) return;
+  if(!HAS_L()){ slot.innerHTML=`<div class="empty">Map could not load. Check your connection.</div>`; return; }
+  if(!M.el){ M.el=document.createElement("div"); }
+  M.el.classList.add("lmap"); M.el.classList.toggle("big", slot.dataset.mapslot==="1");
+  slot.appendChild(M.el);
+  if(!M.map){ M.map=newMap(M.el); M.layer=L.layerGroup().addTo(M.map); }
+  M.map.invalidateSize();
+  drawRoute(M.layer,S.cfg.stops);
+  const key=JSON.stringify(S.cfg.stops.map(s=>[s.lat,s.lng]))+slot.dataset.mapslot;
+  if(M.fitKey!==key){ M.map.fitBounds(L.latLngBounds(S.cfg.stops.map(s=>[s.lat,s.lng])).pad(0.12)); M.fitKey=key; }
+  setTimeout(()=>M.map&&M.map.invalidateSize(),60);
+}
+function viewMap(){
+  const st=S.cfg.stops, s=status();
+  const list = st.map((x,i)=>`<div class="li"><span class="badge">${i+1}</span><div class="grow"><b>${esc(x.name)}</b><div class="muted" style="font-size:13px">${esc(x.address||"")}</div></div><a class="btn sm ghost" href="${gmaps(stopQuery(x))}" target="_blank" rel="noopener" style="text-decoration:none">${t("directions")}</a></div>`).join("");
+  return `<section class="card">${mapHtml(true)}<div class="map-legend"><span style="display:flex;gap:6px;align-items:center">${trainSvg(18)} ${liveFresh()? `${t("live")} · ${t("updated")} ${ago(S.cfg.live.ts)}` : (s.phase==="move"? `${t("nextStop")}: ${esc(st[s.i+1].name)}` : esc(st[Math.min(s.i,st.length-1)].name))}</span><a href="${gmapsRoute()}" target="_blank" rel="noopener">${t("openRoute")} ↗</a></div></section>
+  <section class="card list">${list}</section>`;
+}
+
+/* ---------- seats ---------- */
+const seatNo = (w,r,c) => w*PER+(r-1)*4+c;
+function coachHtml(w){
+  let rows="";
+  for(let r=1;r<=ROWS;r++){
+    if(r===6) rows+=`<div class="table-sep" aria-hidden="true"></div>`;
+    const cell = c => { const n=seatNo(w,r,c), b=S.seats[n]; const mine = S.my.seat==n && b;
+      const cls = mine? "seat mine" : b? "seat taken":"seat";
+      const nm = b? `<small>${esc((b.name||"").split(" ")[0])}</small>` : "";
+      return `<button class="${cls}" data-seat="${n}" aria-label="${t("seat")} ${n}${b?" – "+esc(b.name):""}">${n}${nm}</button>`; };
+    rows += `<div class="row">${cell(1)}${cell(2)}<div class="rown">${r}</div>${cell(3)}${cell(4)}</div>`;
+  }
+  const free = PER - Object.keys(S.seats).filter(k=>wagonOf(+k)===WAGONS[w]).length;
+  return `<div class="coach-wrap"><div class="coach-title"><b>${t("wagon")} ${WAGONS[w]}</b><span class="muted">${free} ${t("free").toLowerCase()}</span></div><div class="coach"><div class="door">${w===0?"▲ "+esc(S.cfg.stops[S.cfg.stops.length-1].name):"▲ "+t("wagon")+" "+WAGONS[w-1]}</div>${rows}<div class="door">${w===WAGONS.length-1?"WC · ☕":"▼ "+t("wagon")+" "+WAGONS[w+1]}</div></div></div>`;
+}
+function viewSeats(){
+  const taken = Object.entries(S.seats).sort((a,b)=>a[0]-b[0]);
+  const plist = taken.length ? taken.map(([n,b])=>`<div class="li"><span class="badge">${n}</span><div class="grow"><b>${esc(b.name)}</b><div class="muted" style="font-size:12px">${t("wagon")} ${wagonOf(+n)}</div></div><span class="muted" style="font-size:13px">${esc(stopName(b.stop))}</span></div>`).join("") : `<div class="empty">${t("nobody")}</div>`;
+  const mine = S.my.seat && S.seats[S.my.seat] ? ticketHtml(S.my.seat) : "";
+  return `${mine}<section class="card"><div class="wagon-head"><div class="sec-h">${t("seats")}</div><div class="legend"><span><i style="background:var(--seat)"></i>${t("free")}</span><span><i style="background:var(--seat-taken)"></i>${t("taken")}</span><span><i style="background:var(--seat-mine)"></i>${t("yours")}</span></div></div>
+    <div style="padding:10px 14px 0" class="muted">${t("tapSeat")}</div>
+    <div class="wagon">${WAGONS.map((_,w)=>coachHtml(w)).join("")}</div></section>
+    <section class="card"><div class="wagon-head"><div class="sec-h">${t("passengers")}</div><span class="badge">${taken.length}/${TOTAL}</span></div><div class="list">${plist}</div></section>`;
+}
+function stopName(id){ const s=S.cfg.stops.find(x=>x.id===id); return s?s.name:(id||""); }
+function ticketHtml(n){
+  const b=S.seats[n]; if(!b) return "";
+  const i=S.cfg.stops.findIndex(x=>x.id===b.stop), tl=timeline(); const o=tl[Math.max(0,i)]||{};
+  const tm = o.depE!=null? fmt(o.depE) : fmt(o.arrE);
+  return `<section class="ticket"><div class="muted" style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase">${esc(S.cfg.trainNo)} · ${t("wagon")} ${wagonOf(+n)}</div>
+    <div style="display:flex;justify-content:space-between;align-items:end;gap:10px"><div><div class="big">${esc(b.name)}</div><div>${t("joinAt")} <b>${esc(stopName(b.stop))}</b>${tm?` · ${tm}`:""}</div></div><div style="text-align:right"><div class="muted" style="font-size:12px">${t("seat")}</div><div class="big">${n}</div></div></div></section>`;
+}
+
+/* ---------- food ---------- */
+function foodImg(id){ const im=S.imgs[id]; return im? `<img src="${esc(im)}" alt="">` : FOOD_SVG[id]; }
+function price(id){ const p=S.cfg.prices?.[id]; return Number.isFinite(+p)? +p : DEFAULT_CFG.prices[id]; }
+function toastWord(n){ return n===1? t("toast") : t("toasts"); }
+function viewFood(){
+  const cards = FOODS.map(f=>{ const q=S.cart[f.id]||0, p=price(f.id);
+    return `<article class="card food"><div class="pic">${foodImg(f.id)}</div><div class="bd"><h3>${esc(f.n[S.lang]||f.n.en)}</h3><p>${esc(f.d[S.lang]||f.d.en)}</p>
+      <div class="price"><span class="toastp">${TOAST_ICON} ${p} ${toastWord(p)}</span><div class="step"><button data-dec="${f.id}" aria-label="−">−</button><b>${q}</b><button data-inc="${f.id}" aria-label="+">+</button></div></div></div></article>`; }).join("");
+  const myOrders = S.orders.filter(o=>S.my.orders?.includes(o.id));
+  const mine = myOrders.length? `<section class="card"><div class="wagon-head"><div class="sec-h">${t("yourOrder")}</div><span class="badge">${myOrders.reduce((a,o)=>a+(o.toasts||0),0)} ${TOAST_ICON}</span></div><div class="list">${myOrders.map(orderLine).join("")}</div></section>`:"";
+  return `<section><div class="sec-h">${t("menu")}</div><div class="muted" style="font-size:14px;margin-top:2px">${t("menuNote")}</div></section><div class="foods">${cards}</div>${mine}`;
+}
+function orderLine(o){ const items=Object.entries(o.items||{}).filter(([,q])=>q>0).map(([id,q])=>`${q}× ${esc((FOODS.find(f=>f.id===id)?.n[S.lang])||id)}`).join(", ");
+  return `<div class="li"><div class="grow"><b>${esc(o.name)}</b>${o.seat?` <span class="muted">· ${t("seat")} ${esc(o.seat)}</span>`:""}<div class="muted" style="font-size:13px">${items}</div></div><span class="badge">${o.toasts}</span></div>`; }
+function cartTotal(){ return FOODS.reduce((a,f)=>a+(S.cart[f.id]||0)*price(f.id),0); }
+function cartCount(){ return Object.values(S.cart).reduce((a,b)=>a+b,0); }
+
+/* ---------- render ---------- */
+function render(){
+  document.documentElement.lang=S.lang;
+  $("#lang").value=S.lang;
+  document.querySelectorAll("[data-t]").forEach(el=>el.textContent=t(el.dataset.t));
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-current", b.dataset.tab===S.tab?"page":"false"));
+  renderBar();
+  const v = {route:viewRoute,map:viewMap,seats:viewSeats,food:viewFood}[S.tab]||viewRoute;
+  $("#main").innerHTML = v();
+  mountMap();
+  const cc=cartCount();
+  $("#cartbar").hidden = !(S.tab==="food" && cc>0);
+  if(cc>0) $("#cartBtn").innerHTML = `<span>${t("checkout")} · ${cc}</span><span>${cartTotal()} ${toastWord(cartTotal())}</span>`;
+  if(S.admin) renderAdminLists();
+}
+
+/* ---------- sheets ---------- */
+function openSheet(html, onMount){
+  const root=$("#sheetRoot");
+  root.innerHTML=`<div class="sheet-bg" id="sheetBg"><div class="sheet gut" role="dialog" aria-modal="true"><div class="grab"></div>${html}</div></div>`;
+  $("#sheetBg").addEventListener("click",e=>{ if(e.target.id==="sheetBg"){ stopGps(); dropAdmMap(); closeSheet(); render(); } });
+  onMount && onMount(root);
+}
+function closeSheet(){ $("#sheetRoot").innerHTML=""; if(S.admin){ S.admin=false; } }
+function flash(msg){ document.querySelectorAll(".toastmsg").forEach(x=>x.remove()); const d=document.createElement("div"); d.className="toastmsg"; d.textContent=msg; document.body.appendChild(d); setTimeout(()=>d.remove(),2600); }
+function stopOptions(sel){ return S.cfg.stops.slice(0,-1).map(s=>`<option value="${esc(s.id)}"${s.id===sel?" selected":""}>${esc(s.name)}</option>`).join(""); }
+function fallbackBox(text){
+  return `<div class="note warn">${t("cantWrite")}</div><div class="copybox" id="copyTxt">${esc(text)}</div>
+  <div class="rowflex"><button class="btn sm ghost" id="copyBtn">${t("copy")}</button><a class="btn sm blue" style="text-decoration:none" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent(text)}">${t("sendWA")} ↗</a></div>`;
+}
+function wireCopy(text){ const b=$("#copyBtn"); if(!b) return; b.onclick=async()=>{ try{ await navigator.clipboard.writeText(text); b.textContent=t("copied"); }catch(e){ const r=document.createRange(); r.selectNodeContents($("#copyTxt")); const s=getSelection(); s.removeAllRanges(); s.addRange(r);} }; }
+
+function seatSheet(n){
+  const b=S.seats[n]; const mine = S.my.seat==n;
+  if(b && !mine){
+    openSheet(`<h2>${t("seat")} ${n} · ${t("wagon")} ${wagonOf(n)}</h2><p><b>${esc(b.name)}</b> · ${t("joinAt")} ${esc(stopName(b.stop))}</p><button class="btn ghost" id="x">${t("close")}</button>`,()=>$("#x").onclick=closeSheet);
+    return;
+  }
+  if(b && mine){
+    openSheet(`<h2>${t("seat")} ${n} · ${t("wagon")} ${wagonOf(n)}</h2>${ticketHtml(n)}<div class="rowflex" style="margin-top:12px"><button class="btn danger" id="cxl">${t("cancel")}</button><button class="btn ghost" id="x">${t("close")}</button></div>`,()=>{
+      $("#x").onclick=closeSheet;
+      $("#cxl").onclick=async()=>{ try{ await S.db.doc("seats/"+n).delete(); S.my.seat=null; saveMy(); closeSheet(); render(); }catch(e){ flash(e.message||"Error"); } };
+    });
+    return;
+  }
+  const defName = S.my.name||"";
+  openSheet(`<h2>${t("seat")} ${n} · ${t("wagon")} ${wagonOf(n)}</h2><form class="form" id="seatForm"><label>${t("yourName")}<input id="seatName" autocomplete="name" value="${esc(defName)}" required maxlength="40"></label>
+    <label>${t("joinAt")}<select id="seatStop">${stopOptions(S.my.stop||S.cfg.stops[0].id)}</select></label>
+    <div id="seatMsg"></div><button class="btn" type="submit">${t("reserve")}</button></form>`,()=>{
+    $("#seatName").focus();
+    $("#seatForm").addEventListener("submit",async e=>{
+      e.preventDefault();
+      const name=$("#seatName").value.trim(), stop=$("#seatStop").value;
+      if(!name){ $("#seatMsg").innerHTML=`<div class="note warn">${t("needName")}</div>`; return; }
+      S.my.name=name; S.my.stop=stop; saveMy();
+      const text=`🎂 ${S.cfg.trainNo} – ${t("wagon")} ${wagonOf(n)}, ${t("seat")} ${n}\n${name}\n${t("joinAt")} ${stopName(stop)}`;
+      const ok = await claimSeat(n,{name,stop});
+      if(ok===true){ closeSheet(); render(); flash(`${t("booked")}: ${n}`); }
+      else if(ok==="taken"){ $("#seatMsg").innerHTML=`<div class="note warn">${t("taken2")}</div>`; }
+      else { $("#seatMsg").innerHTML=fallbackBox(text); wireCopy(text); }
+    });
+  });
+}
+async function claimSeat(n,data){
+  if(!S.db) return false;
+  const ref=S.db.doc("seats/"+n);
+  try{
+    await S.db.runTransaction(async tx=>{ const cur=await tx.get(ref); if(cur.exists) throw {code:"taken"}; tx.set(ref,{...data, by:S.uid||null, ts:Date.now()}); });
+  }catch(e){ return e && e.code==="taken" ? "taken" : false; }
+  if(S.my.seat && S.my.seat!=n && S.seats[S.my.seat] && S.seats[S.my.seat].by===S.uid){ try{ await S.db.doc("seats/"+S.my.seat).delete(); }catch(e){} }
+  S.my.seat=n; saveMy(); return true;
+}
+function checkoutSheet(){
+  const items=FOODS.filter(f=>S.cart[f.id]>0);
+  const lines=items.map(f=>`<div class="li"><div class="grow">${S.cart[f.id]}× ${esc(f.n[S.lang])}</div><span class="badge">${S.cart[f.id]*price(f.id)}</span></div>`).join("");
+  const total=cartTotal();
+  openSheet(`<h2>${t("yourOrder")}</h2><div class="card list" style="margin-bottom:12px">${lines}<div class="li"><b class="grow">${t("total")}</b><span class="toastp">${TOAST_ICON} ${total} ${toastWord(total)}</span></div></div>
+   <form class="form" id="ordForm"><label>${t("yourName")}<input id="ordName" autocomplete="name" value="${esc(S.my.name||"")}" required maxlength="40"></label><div id="ordMsg"></div><button class="btn" type="submit">${t("placeOrder")}</button></form>`,()=>{
+    $("#ordForm").addEventListener("submit",async e=>{
+      e.preventDefault();
+      const name=$("#ordName").value.trim(); if(!name){ $("#ordMsg").innerHTML=`<div class="note warn">${t("needName")}</div>`; return; }
+      S.my.name=name; saveMy();
+      const itemsObj={}; items.forEach(f=>itemsObj[f.id]=S.cart[f.id]);
+      const seat = S.my.seat && S.seats[S.my.seat] ? String(S.my.seat) : "";
+      const text=`🍽 ${name}${seat?` (${t("seat")} ${seat})`:""}\n`+items.map(f=>`${S.cart[f.id]}× ${f.n[S.lang]}`).join("\n")+`\n${t("total")}: ${total} ${toastWord(total)}`;
+      let ok=false;
+      if(S.db){
+        try{ const ref=S.db.collection("orders").doc(); await ref.set({name,seat,items:itemsObj,toasts:total,ts:Date.now(),by:S.uid||null,done:false}); S.my.orders=[...(S.my.orders||[]),ref.id]; saveMy(); ok=true; }
+        catch(err){ if(err && err.code==="invalid_argument") S.canWrite=S.canWrite; }
+      }
+      if(ok){ S.cart={}; closeSheet(); render(); flash(`${t("ordered")} ${t("toPay")}: ${total} ${toastWord(total)}`); }
+      else { $("#ordMsg").innerHTML=fallbackBox(text); wireCopy(text); }
+    });
+  });
+}
+
+/* ---------- admin ---------- */
+function adminEntry(){
+  if(!S.fb){ // demo mode
+    openSheet(`<h2>Admin</h2><div class="note warn">Demo mode: the database isn't connected yet, so changes stay on this phone only.</div><button class="btn blue" id="demoIn" style="margin-top:12px">Open admin</button>`,()=>{ $("#demoIn").onclick=()=>{ S.canAdmin=true; adminPanel(); }; });
+    return;
+  }
+  openSheet(`<h2>Admin login</h2><form class="form" id="loginForm"><label>Email<input id="lgEmail" type="email" autocomplete="username" required></label><label>Password<input id="lgPass" type="password" autocomplete="current-password" required></label><div id="lgMsg"></div><button class="btn blue" type="submit">Log in</button></form>`,()=>{
+    $("#lgEmail").focus();
+    $("#loginForm").addEventListener("submit",async e=>{ e.preventDefault(); $("#lgMsg").innerHTML="";
+      try{ await S.fb.auth().signInWithEmailAndPassword($("#lgEmail").value.trim(),$("#lgPass").value); }
+      catch(err){ $("#lgMsg").innerHTML=`<div class="note warn">Login failed. Check the email and password.</div>`; return; }
+      setTimeout(()=>{ if(S.canAdmin) adminPanel(); else $("#lgMsg").innerHTML=`<div class="note warn">This account isn't on the admin list.</div>`; },300);
+    });
+  });
+}
+function adminPanel(){
+  S.admin=true;
+  const tabs=[["times","Timetable"],["live","Location"],["food","Food"],["seats","Bookings"],["orders","Orders"],["setup","Setup"]];
+  openSheet(`<div class="rowflex" style="justify-content:space-between"><h2>Admin</h2><div class="rowflex">${S.fb?`<button class="btn sm ghost" id="admOut">Log out</button>`:""}<button class="btn sm ghost" id="admClose">Close</button></div></div>
+    ${S.fb?`<div class="muted" style="font-size:12px;margin-bottom:8px">Logged in as ${esc(S.authUser?.email||"")}</div>`:`<div class="note warn" style="margin-bottom:10px">Demo mode: changes stay on this phone until the database is connected.</div>`}
+    <div class="adm-tabs" id="admTabs">${tabs.map(([k,l])=>`<button data-adm="${k}" aria-pressed="${S.admTab===k}">${l}</button>`).join("")}</div>
+    <div id="admBody" style="margin-top:12px;display:grid;gap:12px"></div>`,()=>{
+      $("#admClose").onclick=()=>{ stopGps(); dropAdmMap(); closeSheet(); render(); };
+      const out=$("#admOut"); if(out) out.onclick=async()=>{ stopGps(); dropAdmMap(); await S.fb.auth().signOut(); closeSheet(); render(); };
+      $("#admTabs").onclick=e=>{ const b=e.target.closest("[data-adm]"); if(!b) return; S.admTab=b.dataset.adm; document.querySelectorAll("#admTabs button").forEach(x=>x.setAttribute("aria-pressed",x===b)); renderAdminBody(); };
+      renderAdminBody();
+    });
+}
+async function saveCfg(patch,msg){
+  const next={...S.cfg,...patch};
+  if(!S.db){ flash("Saving isn't available here."); return false; }
+  try{ await S.db.doc("party/config").set(stripCfg(next)); S.cfg=next; render(); if(msg) flash(msg); return true; }
+  catch(e){ flash(denied(e) ? "You don't have permission to change this." : "Couldn't save. Try again."); return false; }
+}
+function stripCfg(c){ return {title:c.title,trainNo:c.trainNo,date:c.date||"",stops:c.stops,prices:c.prices,live:c.live||null}; }
+function dropAdmMap(){ if(S.admMap){ try{S.admMap.remove()}catch(e){} S.admMap=null; } }
+function renderAdminBody(){
+  const body=$("#admBody"); if(!body) return;
+  dropAdmMap();
+  const k=S.admTab;
+  if(k==="times"){
+    body.innerHTML = `<div class="note">Times are 24-hour (HH:MM). The delay is added to that stop's arrival and departure and shows in red for everyone.</div>
+      <div class="rowflex"><span style="font-weight:700">All upcoming stops:</span><button class="btn sm ghost" data-all="-5">−5</button><button class="btn sm danger" data-all="5">+5 min</button><button class="btn sm danger" data-all="15">+15 min</button><button class="btn sm ghost" data-all="0">Reset delays</button></div>
+      ${S.cfg.stops.map((s,i)=>`<div class="adm-stop" data-i="${i}"><b>${i+1}. ${esc(s.name)}</b>
+        <div class="grid2">${i>0?`<label class="muted" style="font-size:12px">Arrival<input type="time" data-f="arr" value="${esc(s.arr)}"></label>`:"<div></div>"}${i<S.cfg.stops.length-1?`<label class="muted" style="font-size:12px">Departure<input type="time" data-f="dep" value="${esc(s.dep)}"></label>`:"<div></div>"}</div>
+        <div class="delayctl"><span class="muted" style="font-size:13px">Delay</span><button class="btn sm ghost" data-d="-5">−5</button><button class="btn sm ghost" data-d="-1">−1</button><b data-show>${s.delay>0?"+"+s.delay:s.delay} min</b><button class="btn sm ghost" data-d="1">+1</button><button class="btn sm ghost" data-d="5">+5</button></div></div>`).join("")}
+      <button class="btn" id="saveTimes">Save timetable</button>`;
+    const draft = structuredClone(S.cfg.stops);
+    body.querySelectorAll(".adm-stop").forEach(box=>{ const i=+box.dataset.i;
+      box.querySelectorAll("input[data-f]").forEach(inp=>inp.oninput=()=>draft[i][inp.dataset.f]=inp.value);
+      box.querySelectorAll("[data-d]").forEach(b=>b.onclick=()=>{ draft[i].delay=Math.max(0,(+draft[i].delay||0)+(+b.dataset.d)); box.querySelector("[data-show]").textContent=(draft[i].delay>0?"+":"")+draft[i].delay+" min"; });
+    });
+    body.querySelectorAll("[data-all]").forEach(b=>b.onclick=async()=>{
+      const v=+b.dataset.all, s=status(); const from = s.phase==="pre"?0 : s.phase==="move"? s.i+1 : s.i;
+      const stops=structuredClone(S.cfg.stops).map((x,i)=>{ if(v===0) x.delay=0; else if(i>=from) x.delay=Math.max(0,(+x.delay||0)+v); return x; });
+      if(await saveCfg({stops}, v===0?"Delays cleared":`Delay ${v>0?"+":""}${v} min saved`)) renderAdminBody();
+    });
+    $("#saveTimes").onclick=()=>saveCfg({stops:draft},"Timetable saved");
+  }
+  else if(k==="live"){
+    body.innerHTML = `<div class="note">Guests see your position as a red train on the map for 45 minutes after each update. Without an update, the train moves along the route by the timetable.</div>
+      <button class="btn blue" id="gpsBtn">${S.gpsWatch!=null?"Stop sharing my location":"Share my phone's location"}</button><div id="gpsMsg" class="muted" style="font-size:13px"></div>
+      <div class="sec-h" style="font-size:16px">Or tap the map where you are</div><div class="lmap adm" id="admLive"></div>
+      <div class="sec-h" style="font-size:16px">Or pick a stop</div><div class="rowflex">${S.cfg.stops.map((s,i)=>`<button class="btn sm ghost" data-at="${i}">${esc(s.name)}</button>`).join("")}</div>
+      <button class="btn sm danger" id="liveOff">Hide live position (use timetable)</button>`;
+    $("#gpsBtn").onclick=toggleGps;
+    if(HAS_L()){ S.admMap=newMap($("#admLive")); const lay=L.layerGroup().addTo(S.admMap); drawRoute(lay,S.cfg.stops); S.admMap.fitBounds(L.latLngBounds(S.cfg.stops.map(s=>[s.lat,s.lng])).pad(0.12)); S.admMap.on("click",e=>setLive(e.latlng.lat,e.latlng.lng,"map")); setTimeout(()=>S.admMap&&S.admMap.invalidateSize(),80); }
+    body.querySelectorAll("[data-at]").forEach(b=>b.onclick=()=>{ const s=S.cfg.stops[+b.dataset.at]; setLive(s.lat,s.lng,"stop"); });
+    $("#liveOff").onclick=async()=>{ stopGps(); if(await saveCfg({live:null},"Live position hidden")) renderAdminBody(); };
+  }
+  else if(k==="food"){
+    body.innerHTML = `<div class="note">Set each dish's price in toasts and replace its picture with a photo from your phone. Pictures are shrunk before saving.</div>`+
+      FOODS.map(f=>`<div class="adm-stop"><div style="display:grid;grid-template-columns:72px 1fr;gap:10px;align-items:center"><div style="width:72px;height:72px;border-radius:10px;overflow:hidden" class="pic">${foodImg(f.id)}</div><div><b>${esc(f.n.en)}</b><div class="delayctl"><span class="muted" style="font-size:13px">Price</span><button class="btn sm ghost" data-p="${f.id}" data-v="-1">−</button><b style="color:var(--blue)">${price(f.id)}</b><button class="btn sm ghost" data-p="${f.id}" data-v="1">+</button><span class="muted" style="font-size:13px">toasts</span></div></div></div>
+        <div class="rowflex"><label class="btn sm blue" style="cursor:pointer">Upload picture<input type="file" accept="image/*" data-img="${f.id}" hidden></label>${S.imgs[f.id]?`<button class="btn sm ghost" data-reset="${f.id}">Use default drawing</button>`:""}</div></div>`).join("");
+    body.querySelectorAll("[data-p]").forEach(b=>b.onclick=async()=>{ const id=b.dataset.p; const prices={...DEFAULT_CFG.prices,...S.cfg.prices}; prices[id]=Math.max(0,price(id)+(+b.dataset.v)); if(await saveCfg({prices})) renderAdminBody(); });
+    body.querySelectorAll("[data-img]").forEach(inp=>inp.onchange=async()=>{ const file=inp.files[0]; if(!file) return; try{ const url=await shrink(file); await S.db.doc("party/img_"+inp.dataset.img).set({src:url,ts:Date.now()}); S.imgs[inp.dataset.img]=url; flash("Picture saved"); renderAdminBody(); render(); }catch(e){ flash(denied(e)?"You don't have permission to change this.":"Couldn't save the picture."); } });
+    body.querySelectorAll("[data-reset]").forEach(b=>b.onclick=async()=>{ try{ await S.db.doc("party/img_"+b.dataset.reset).delete(); delete S.imgs[b.dataset.reset]; renderAdminBody(); render(); }catch(e){ flash("Couldn't remove it."); } });
+  }
+  else if(k==="seats"||k==="orders"){ body.innerHTML=`<div id="admList"></div>`; renderAdminLists(); }
+  else if(k==="setup"){
+    body.innerHTML = `<form class="form" id="setupForm"><div class="grid2"><label>Train name<input id="sTitle" value="${esc(S.cfg.title)}"></label><label>Train number<input id="sNo" value="${esc(S.cfg.trainNo)}"></label></div>
+      <label>Party date (leave empty to always use today)<input type="date" id="sDate" value="${esc(S.cfg.date||"")}"></label>
+      <div class="sec-h" style="font-size:16px">Stop positions</div>
+      <div class="note">Drag the numbered pins on the map to put each stop in the right spot. Or paste a Google Maps link or coordinates into a stop below. Then tap Save setup.</div>
+      <div class="lmap adm" id="setupMap"></div>
+      ${S.cfg.stops.map((s,i)=>`<div class="adm-stop" data-i="${i}"><b>Stop ${i+1}</b><label>Name<input data-f="name" value="${esc(s.name)}"></label><label>Address<input data-f="address" value="${esc(s.address)}"></label>
+        <label>Google Maps link or coordinates<input data-gm placeholder="https://www.google.com/maps/... or 48.2215, 16.3815"></label>
+        <div class="rowflex"><a class="btn sm ghost" style="text-decoration:none" target="_blank" rel="noopener" data-find href="${gmaps(s.name+", "+(s.address||"Wien"))}">Find on Google Maps ↗</a><span class="muted" data-gmmsg style="font-size:12px"></span></div>
+        <div class="grid2"><label>Latitude<input data-f="lat" inputmode="decimal" value="${s.lat}"></label><label>Longitude<input data-f="lng" inputmode="decimal" value="${s.lng}"></label></div></div>`).join("")}
+      <div class="note">How to get a stop from Google Maps: open the place, then copy the long link from the browser's address bar and paste it above. On a phone you can also long-press the spot and copy the two numbers shown (for example 48.2215, 16.3815). Short share links (maps.app.goo.gl) can't be read, so open them first and copy the full link.</div>
+      <button class="btn" type="submit">Save setup</button></form>`;
+    const draftStops=()=>{ const st=structuredClone(S.cfg.stops); body.querySelectorAll(".adm-stop").forEach(box=>{ const i=+box.dataset.i; box.querySelectorAll("input[data-f]").forEach(inp=>{ const f=inp.dataset.f; let v=inp.value.trim(); if(f==="lat"||f==="lng"){ v=parseFloat(v.replace(",",".")); if(!isFinite(v)) v=st[i][f]; } st[i][f]=v; }); }); return st; };
+    const setLL=(i,lat,lng)=>{ const box=body.querySelector(`.adm-stop[data-i="${i}"]`); box.querySelector('[data-f="lat"]').value=lat.toFixed(5); box.querySelector('[data-f="lng"]').value=lng.toFixed(5); };
+    let setupLayer=null;
+    const redraw=()=>{ if(!setupLayer) return; drawRoute(setupLayer,draftStops(),{drag:true,onDrag:(i,lat,lng)=>{ setLL(i,lat,lng); redraw(); }}); };
+    if(HAS_L()){ S.admMap=newMap($("#setupMap")); setupLayer=L.layerGroup().addTo(S.admMap); redraw(); S.admMap.fitBounds(L.latLngBounds(S.cfg.stops.map(s=>[s.lat,s.lng])).pad(0.15)); setTimeout(()=>S.admMap&&S.admMap.invalidateSize(),80); }
+    body.querySelectorAll(".adm-stop").forEach(box=>{ const i=+box.dataset.i;
+      box.querySelector("[data-gm]").addEventListener("input",e=>{ const msg=box.querySelector("[data-gmmsg]"); const v=e.target.value.trim(); if(!v){msg.textContent="";return;}
+        if(/goo\.gl|maps\.app/.test(v)){ msg.textContent="Short link: open it first, then copy the full link."; return; }
+        const ll=parseLatLng(v); if(!ll){ msg.textContent="No coordinates found in that text."; return; }
+        setLL(i,ll.lat,ll.lng); msg.textContent=`Found ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`; redraw(); if(S.admMap) S.admMap.panTo([ll.lat,ll.lng]); });
+      box.querySelectorAll('[data-f="lat"],[data-f="lng"]').forEach(inp=>inp.addEventListener("change",redraw));
+      const nm=box.querySelector('[data-f="name"]'), ad=box.querySelector('[data-f="address"]'), fl=box.querySelector("[data-find]");
+      const upd=()=>fl.href=gmaps(nm.value+", "+(ad.value||"Wien")); nm.addEventListener("input",upd); ad.addEventListener("input",upd);
+    });
+    $("#setupForm").addEventListener("submit",e=>{ e.preventDefault();
+      const stops=structuredClone(S.cfg.stops);
+      body.querySelectorAll(".adm-stop").forEach(box=>{ const i=+box.dataset.i; box.querySelectorAll("input[data-f]").forEach(inp=>{ const f=inp.dataset.f; let v=inp.value.trim(); if(f==="lat"||f==="lng"){ v=parseFloat(v.replace(",",".")); if(!isFinite(v)) v=stops[i][f]; } stops[i][f]=v; }); });
+      saveCfg({title:$("#sTitle").value.trim(),trainNo:$("#sNo").value.trim(),date:$("#sDate").value,stops},"Setup saved");
+    });
+  }
+}
+function renderAdminLists(){
+  const el=$("#admList"); if(!el) return;
+  if(S.admTab==="seats"){
+    const rows=Object.entries(S.seats).sort((a,b)=>a[0]-b[0]).map(([n,b])=>`<div class="li"><span class="badge">${n}</span><div class="grow"><b>${esc(b.name)}</b><div class="muted" style="font-size:13px">${esc(stopName(b.stop))}</div></div><button class="btn sm danger" data-delseat="${n}">Remove</button></div>`).join("") || `<div class="empty">No bookings yet.</div>`;
+    const free=[]; for(let n=1;n<=TOTAL;n++) if(!S.seats[n]) free.push(n);
+    el.innerHTML=`<div class="card list">${rows}</div>
+      <form class="form" id="addSeat" style="margin-top:12px"><div class="sec-h" style="font-size:16px">Add a booking for a guest</div><div class="grid3"><label>Seat<select id="asN">${free.map(n=>`<option value="${n}">${n} (W${wagonOf(n)})</option>`).join("")}</select></label><label style="grid-column:span 2">Name<input id="asName" maxlength="40"></label></div><label>Joins at<select id="asStop">${stopOptions()}</select></label><button class="btn blue" type="submit">Add booking</button></form>`;
+    el.querySelectorAll("[data-delseat]").forEach(b=>b.onclick=async()=>{ try{ await S.db.doc("seats/"+b.dataset.delseat).delete(); }catch(e){ flash("Couldn't remove it."); } });
+    $("#addSeat").addEventListener("submit",async e=>{ e.preventDefault(); const name=$("#asName").value.trim(); if(!name) return; try{ await S.db.doc("seats/"+$("#asN").value).set({name,stop:$("#asStop").value,by:null,ts:Date.now(),admin:true}); flash("Booking added"); }catch(err){ flash("Couldn't save it."); } });
+  } else if(S.admTab==="orders"){
+    const per={}; S.orders.forEach(o=>{ per[o.name]=(per[o.name]||0)+(o.toasts||0); });
+    const counts={}; S.orders.filter(o=>!o.done).forEach(o=>Object.entries(o.items||{}).forEach(([id,q])=>counts[id]=(counts[id]||0)+q));
+    el.innerHTML=`<div class="card list"><div class="li"><b class="grow">Still to serve</b></div>${FOODS.map(f=>`<div class="li"><div class="grow">${esc(f.n.en)}</div><span class="badge">${counts[f.id]||0}</span></div>`).join("")}</div>
+      <div class="card list" style="margin-top:12px"><div class="li"><b class="grow">Toasts owed</b></div>${Object.entries(per).sort((a,b)=>b[1]-a[1]).map(([n,v])=>`<div class="li"><div class="grow">${esc(n)}</div><span class="badge">${v}</span></div>`).join("")||`<div class="empty">No orders yet.</div>`}</div>
+      <div class="card list" style="margin-top:12px">${S.orders.map(o=>`<div class="li" style="${o.done?"opacity:.55":""}"><div class="grow">${orderLine(o).replace(/^<div class="li">|<\/div>$/g,"")}</div><button class="btn sm ${o.done?"ghost":"blue"}" data-done="${esc(o.id)}">${o.done?"Undo":"Served"}</button><button class="btn sm danger" data-delord="${esc(o.id)}">✕</button></div>`).join("")||`<div class="empty">No orders yet.</div>`}</div>`;
+    el.querySelectorAll("[data-done]").forEach(b=>b.onclick=async()=>{ const o=S.orders.find(x=>x.id===b.dataset.done); try{ await S.db.doc("orders/"+o.id).update({done:!o.done}); }catch(e){ flash("Couldn't update it."); } });
+    el.querySelectorAll("[data-delord]").forEach(b=>b.onclick=async()=>{ try{ await S.db.doc("orders/"+b.dataset.delord).delete(); }catch(e){ flash("Couldn't remove it."); } });
+  }
+}
+async function setLive(lat,lng,src){ const live={lat:+lat.toFixed(5),lng:+lng.toFixed(5),ts:Date.now(),src}; if(await saveCfg({live},"Position updated")) renderAdminBody(); }
+let lastGps=0;
+function toggleGps(){
+  if(S.gpsWatch!=null){ stopGps(); renderAdminBody(); return; }
+  const msg=$("#gpsMsg");
+  if(!navigator.geolocation){ msg.textContent="Location isn't available in this view. Tap the map or pick a stop instead."; return; }
+  msg.textContent="Asking your phone for its location…";
+  try{
+    S.gpsWatch=navigator.geolocation.watchPosition(p=>{
+      msg.textContent=`Sharing. Last fix ±${Math.round(p.coords.accuracy)} m. Keep this screen open.`;
+      if(Date.now()-lastGps>30000){ lastGps=Date.now(); setLive(p.coords.latitude,p.coords.longitude,"gps"); }
+    },err=>{ stopGps(); msg.textContent="Your phone's location can't be read inside this page. Tap the map or pick a stop instead."; const b=$("#gpsBtn"); if(b) b.textContent="Share my phone's location"; },{enableHighAccuracy:true,maximumAge:20000,timeout:20000});
+    $("#gpsBtn").textContent="Stop sharing my location";
+  }catch(e){ msg.textContent="Location isn't available in this view. Tap the map or pick a stop instead."; S.gpsWatch=null; }
+}
+function parseLatLng(v){
+  const pats=[/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, /[?&](?:q|query|ll|destination|center)=(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/, /@(-?\d+\.\d+),(-?\d+\.\d+)/, /^\s*(-?\d+[.,]\d+)\s*[,;\s]\s*(-?\d+[.,]\d+)\s*$/];
+  for(const re of pats){ let d=v; try{ d=decodeURIComponent(v); }catch(e){} const m=re.exec(d); if(m){ const lat=parseFloat(m[1].replace(",",".")), lng=parseFloat(m[2].replace(",",".")); if(isFinite(lat)&&isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180) return {lat,lng}; } }
+  return null;
+}
+function stopGps(){ if(S.gpsWatch!=null){ try{navigator.geolocation.clearWatch(S.gpsWatch)}catch(e){} } S.gpsWatch=null; }
+function shrink(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onerror=rej; fr.onload=()=>{ const img=new Image(); img.onerror=rej; img.onload=()=>{ const max=520, sc=Math.min(1,max/Math.max(img.width,img.height)); const c=document.createElement("canvas"); c.width=Math.round(img.width*sc); c.height=Math.round(img.height*sc); c.getContext("2d").drawImage(img,0,0,c.width,c.height); let q=.8, url=c.toDataURL("image/jpeg",q); while(url.length>180000 && q>.3){ q-=.15; url=c.toDataURL("image/jpeg",q); } res(url); }; img.src=fr.result; }; fr.readAsDataURL(file); }); }
+
+/* ---------- events ---------- */
+document.querySelector("nav.tabs").addEventListener("click",e=>{ const b=e.target.closest("[data-tab]"); if(!b) return; S.tab=b.dataset.tab; ls("bj.tab",S.tab); render(); scrollTo({top:0}); });
+$("#lang").addEventListener("change",e=>{ S.lang=e.target.value; ls("bj.lang",S.lang); render(); });
+$("#adminBtn").addEventListener("click",()=> S.canAdmin? adminPanel() : adminEntry());
+$("#cartBtn").addEventListener("click",checkoutSheet);
+$("#main").addEventListener("click",e=>{
+  const s=e.target.closest("[data-seat]"); if(s){ seatSheet(+s.dataset.seat); return; }
+  const inc=e.target.closest("[data-inc]"); if(inc){ S.cart[inc.dataset.inc]=(S.cart[inc.dataset.inc]||0)+1; render(); return; }
+  const dec=e.target.closest("[data-dec]"); if(dec){ S.cart[dec.dataset.dec]=Math.max(0,(S.cart[dec.dataset.dec]||0)-1); render(); return; }
+});
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && $("#sheetBg")){ stopGps(); dropAdmMap(); closeSheet(); render(); } });
+setInterval(()=>{ if(!$("#sheetBg")) render(); else renderBar(); },20000);
+render();
+
+/* ---------- shared data (Firebase, or a local demo store) ---------- */
+function demoDb(){
+  const KEY="bj.demo"; let data={}; try{ data=JSON.parse(localStorage.getItem(KEY)||"{}"); }catch(e){}
+  const subs=new Set(); const save=()=>{ try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){} subs.forEach(f=>f()); };
+  const snap=p=>({id:p.split("/").pop(), exists:p in data, data:()=>data[p]});
+  const doc=p=>({id:p.split("/").pop(), path:p, get:async()=>snap(p), set:async v=>{ data[p]=JSON.parse(JSON.stringify(v)); save(); }, update:async v=>{ if(!(p in data)) throw {code:"not-found"}; data[p]={...data[p],...v}; save(); }, delete:async()=>{ delete data[p]; save(); }});
+  const coll=(name,ord)=>({ doc:id=>doc(name+"/"+(id||Math.random().toString(36).slice(2,12))), orderBy:(f,d)=>coll(name,[f,d]), limit:()=>coll(name,ord),
+    onSnapshot:cb=>{ const run=()=>{ let docs=Object.keys(data).filter(k=>k.startsWith(name+"/")&&k.split("/").length===2).map(snap); if(ord) docs.sort((a,b)=>((a.data()[ord[0]]||0)-(b.data()[ord[0]]||0))*(ord[1]==="desc"?-1:1)); cb({docs}); }; subs.add(run); setTimeout(run); return ()=>subs.delete(run); } });
+  window.addEventListener("storage",e=>{ if(e.key===KEY){ try{ data=JSON.parse(e.newValue||"{}"); }catch(_){} subs.forEach(f=>f()); } });
+  return { doc, collection:n=>coll(n), runTransaction: async fn=>fn({get:r=>r.get(), set:(r,v)=>r.set(v)}) };
+}
+function rerender(){ if(!$("#sheetBg")) render(); else { renderBar(); renderAdminLists(); } }
+function subscribe(db){
+  db.collection("party").onSnapshot(snap=>{
+    const imgs={}; let cfg=null;
+    snap.docs.forEach(d=>{ if(d.id==="config") cfg=d.data(); else if(d.id.startsWith("img_")){ const v=d.data(); if(v&&typeof v.src==="string"&&v.src.startsWith("data:image/")) imgs[d.id.slice(4)]=v.src; } });
+    S.imgs=imgs;
+    if(cfg && Array.isArray(cfg.stops) && cfg.stops.length>=2){ S.cfg={...structuredClone(DEFAULT_CFG),...cfg,prices:{...DEFAULT_CFG.prices,...(cfg.prices||{})}}; }
+    rerender();
+  },e=>console.warn("party",e));
+  db.collection("seats").onSnapshot(snap=>{ const seats={}; snap.docs.forEach(d=>{ const v=d.data(); if(v&&v.name) seats[d.id]=v; }); S.seats=seats; rerender(); },e=>console.warn("seats",e));
+  db.collection("orders").orderBy("ts","desc").limit(500).onSnapshot(snap=>{ S.orders=snap.docs.map(d=>({id:d.id,...d.data()})); rerender(); },e=>console.warn("orders",e));
+}
+(function initData(){
+  const cfg=window.FIREBASE_CONFIG;
+  if(cfg && cfg.apiKey && typeof firebase!=="undefined"){
+    try{
+      firebase.initializeApp(cfg); S.fb=firebase; S.db=firebase.firestore();
+      firebase.auth().onAuthStateChanged(u=>{
+        if(!u){ firebase.auth().signInAnonymously().catch(e=>console.warn("anon",e)); S.uid=null; S.canAdmin=false; return; }
+        S.authUser=u; S.uid=u.uid; S.canAdmin=!!u.email && ADMIN_EMAILS.includes(u.email.toLowerCase());
+        if(!S.subscribed){ S.subscribed=true; subscribe(S.db); }
+      });
+      return;
+    }catch(e){ console.warn("firebase init failed",e); }
+  }
+  S.db=demoDb(); S.uid=ls("bj.uid")||(()=>{ const id="demo-"+Math.random().toString(36).slice(2); ls("bj.uid",id); return id; })(); subscribe(S.db);
+})();
+})();
+</script>
+</body>
+</html>
