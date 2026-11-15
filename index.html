@@ -386,8 +386,8 @@ function ago(ts){ const m=Math.max(0,Math.round((Date.now()-ts)/60000)); return 
 function trainSvg(sz){ return `<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="15" rx="5" fill="#FFD200" stroke="#0B2E63" stroke-width="2"/><rect x="6" y="6" width="12" height="5" rx="1.5" fill="#0B2E63"/><circle cx="8" cy="14.5" r="1.4" fill="#0B2E63"/><circle cx="16" cy="14.5" r="1.4" fill="#0B2E63"/><path d="M7 21l2-3M17 21l-2-3" stroke="#0B2E63" stroke-width="2"/></svg>`; }
 
 /* ---------- map (Leaflet + OpenStreetMap / CARTO tiles) ---------- */
-const TILE_URL="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-const TILE_ATTR='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const TILE_URL="https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+const TILE_ATTR='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 const HAS_L = () => typeof L!=="undefined";
 const M={el:null,map:null,layer:null,fitKey:""};
 function trainLatLng(stops){
@@ -398,7 +398,7 @@ function trainLatLng(stops){
 }
 function newMap(el){
   const map=L.map(el,{zoomControl:true,scrollWheelZoom:false,tap:true});
-  L.tileLayer(TILE_URL,{attribution:TILE_ATTR,subdomains:"abcd",maxZoom:19}).addTo(map);
+  L.tileLayer(TILE_URL,{attribution:TILE_ATTR,maxZoom:19}).addTo(map);
   return map;
 }
 function drawRoute(layer, stops, opt={}){

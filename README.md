@@ -16,4 +16,4 @@ Tap the lock icon and log in with one of the admin accounts created in
 Firebase → Authentication → Users. Admins can edit times and delays, share their live
 location, move stops on the map, change food prices and pictures, and manage bookings and orders.
 
-Map tiles © OpenStreetMap contributors © CARTO.
+Map tiles © OpenStreetMap contributors.
